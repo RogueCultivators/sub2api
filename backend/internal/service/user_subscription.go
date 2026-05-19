@@ -1,6 +1,9 @@
 package service
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 type UserSubscription struct {
 	ID      int64
@@ -43,7 +46,7 @@ func (s *UserSubscription) DaysRemaining() int {
 	if s.IsExpired() {
 		return 0
 	}
-	return int(time.Until(s.ExpiresAt).Hours() / 24)
+	return int(math.Ceil(time.Until(s.ExpiresAt).Hours() / 24))
 }
 
 func (s *UserSubscription) IsWindowActivated() bool {

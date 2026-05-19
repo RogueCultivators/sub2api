@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -43,6 +44,7 @@ type AssignSubscriptionRequest struct {
 	UserID       int64  `json:"user_id" binding:"required"`
 	GroupID      int64  `json:"group_id" binding:"required"`
 	ValidityDays int    `json:"validity_days" binding:"omitempty,max=36500"` // max 100 years
+	ExpiresAt    string `json:"expires_at"`
 	Notes        string `json:"notes"`
 }
 
@@ -51,12 +53,25 @@ type BulkAssignSubscriptionRequest struct {
 	UserIDs      []int64 `json:"user_ids" binding:"required,min=1"`
 	GroupID      int64   `json:"group_id" binding:"required"`
 	ValidityDays int     `json:"validity_days" binding:"omitempty,max=36500"` // max 100 years
+	ExpiresAt    string  `json:"expires_at"`
 	Notes        string  `json:"notes"`
 }
 
 // AdjustSubscriptionRequest represents adjust subscription request (extend or shorten)
 type AdjustSubscriptionRequest struct {
-	Days int `json:"days" binding:"required,min=-36500,max=36500"` // negative to shorten, positive to extend
+	Days      *int   `json:"days" binding:"omitempty,min=-36500,max=36500"` // negative to shorten, positive to extend
+	ExpiresAt string `json:"expires_at"`
+}
+
+func parseOptionalExpiresAt(raw string) (*time.Time, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }
 
 // List handles listing all subscriptions with pagination and filters
@@ -143,11 +158,21 @@ func (h *SubscriptionHandler) Assign(c *gin.Context) {
 
 	// Get admin user ID from context
 	adminID := getAdminIDFromContext(c)
+	expiresAt, err := parseOptionalExpiresAt(req.ExpiresAt)
+	if err != nil {
+		response.BadRequest(c, "Invalid expires_at, must be RFC3339 format")
+		return
+	}
+	if req.ValidityDays <= 0 && expiresAt == nil {
+		response.BadRequest(c, "validity_days or expires_at is required")
+		return
+	}
 
 	subscription, err := h.subscriptionService.AssignSubscription(c.Request.Context(), &service.AssignSubscriptionInput{
 		UserID:       req.UserID,
 		GroupID:      req.GroupID,
 		ValidityDays: req.ValidityDays,
+		ExpiresAt:    expiresAt,
 		AssignedBy:   adminID,
 		Notes:        req.Notes,
 	})
@@ -170,11 +195,21 @@ func (h *SubscriptionHandler) BulkAssign(c *gin.Context) {
 
 	// Get admin user ID from context
 	adminID := getAdminIDFromContext(c)
+	expiresAt, err := parseOptionalExpiresAt(req.ExpiresAt)
+	if err != nil {
+		response.BadRequest(c, "Invalid expires_at, must be RFC3339 format")
+		return
+	}
+	if req.ValidityDays <= 0 && expiresAt == nil {
+		response.BadRequest(c, "validity_days or expires_at is required")
+		return
+	}
 
 	result, err := h.subscriptionService.BulkAssignSubscription(c.Request.Context(), &service.BulkAssignSubscriptionInput{
 		UserIDs:      req.UserIDs,
 		GroupID:      req.GroupID,
 		ValidityDays: req.ValidityDays,
+		ExpiresAt:    expiresAt,
 		AssignedBy:   adminID,
 		Notes:        req.Notes,
 	})
@@ -200,6 +235,15 @@ func (h *SubscriptionHandler) Extend(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	expiresAt, err := parseOptionalExpiresAt(req.ExpiresAt)
+	if err != nil {
+		response.BadRequest(c, "Invalid expires_at, must be RFC3339 format")
+		return
+	}
+	if (req.Days == nil && expiresAt == nil) || (req.Days != nil && expiresAt != nil) {
+		response.BadRequest(c, "exactly one of days or expires_at is required")
+		return
+	}
 
 	idempotencyPayload := struct {
 		SubscriptionID int64                     `json:"subscription_id"`
@@ -209,7 +253,13 @@ func (h *SubscriptionHandler) Extend(c *gin.Context) {
 		Body:           req,
 	}
 	executeAdminIdempotentJSON(c, "admin.subscriptions.extend", idempotencyPayload, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
-		subscription, execErr := h.subscriptionService.ExtendSubscription(ctx, subscriptionID, req.Days)
+		var subscription *service.UserSubscription
+		var execErr error
+		if expiresAt != nil {
+			subscription, execErr = h.subscriptionService.SetSubscriptionExpiresAt(ctx, subscriptionID, *expiresAt)
+		} else {
+			subscription, execErr = h.subscriptionService.ExtendSubscription(ctx, subscriptionID, *req.Days)
+		}
 		if execErr != nil {
 			return nil, execErr
 		}

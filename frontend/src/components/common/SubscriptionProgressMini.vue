@@ -51,9 +51,9 @@
               <span
                 v-if="subscription.expires_at"
                 class="text-xs"
-                :class="getDaysRemainingClass(subscription.expires_at)"
+                :class="getExpirationClass(subscription.expires_at)"
               >
-                {{ formatDaysRemaining(subscription.expires_at) }}
+                {{ formatSubscriptionExpiresAt(subscription.expires_at) }}
               </span>
             </div>
 
@@ -183,6 +183,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { useSubscriptionStore } from '@/stores'
 import type { UserSubscription } from '@/types'
+import { formatDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 
@@ -257,18 +258,13 @@ function formatUsage(used: number | undefined, limit: number | null | undefined)
   return `$${usedValue}/$${limitValue}`
 }
 
-function formatDaysRemaining(expiresAt: string): string {
-  const now = new Date()
+function formatSubscriptionExpiresAt(expiresAt: string): string {
   const expires = new Date(expiresAt)
-  const diff = expires.getTime() - now.getTime()
-  if (diff < 0) return t('subscriptionProgress.expired')
-  const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
-  if (days === 0) return t('subscriptionProgress.expiresToday')
-  if (days === 1) return t('subscriptionProgress.expiresTomorrow')
-  return t('subscriptionProgress.daysRemaining', { days })
+  if (expires.getTime() < Date.now()) return t('subscriptionProgress.expired')
+  return formatDateTime(expires)
 }
 
-function getDaysRemainingClass(expiresAt: string): string {
+function getExpirationClass(expiresAt: string): string {
   const now = new Date()
   const expires = new Date(expiresAt)
   const diff = expires.getTime() - now.getTime()

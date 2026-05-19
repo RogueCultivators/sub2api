@@ -181,6 +181,28 @@ func TestOpenAITokenProvider_CacheMiss_FromCredentials(t *testing.T) {
 	require.Equal(t, "credential-token", cache.tokens[cacheKey])
 }
 
+func TestOpenAITokenProvider_CacheMiss_MissingRefreshTokenUsesStoredAccessTokenEvenIfExpired(t *testing.T) {
+	cache := newOpenAITokenCacheStub()
+	expiresAt := time.Now().Add(-1 * time.Minute).Format(time.RFC3339)
+	account := &Account{
+		ID:       102,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "stored-token",
+			"expires_at":   expiresAt,
+		},
+	}
+
+	provider := NewOpenAITokenProvider(nil, cache, nil)
+	token, err := provider.GetAccessToken(context.Background(), account)
+	require.NoError(t, err)
+	require.Equal(t, "stored-token", token)
+
+	cacheKey := OpenAITokenCacheKey(account)
+	require.Equal(t, "stored-token", cache.tokens[cacheKey])
+}
+
 func TestOpenAITokenProvider_TokenRefresh(t *testing.T) {
 	cache := newOpenAITokenCacheStub()
 	accountRepo := &openAIAccountRepoStub{}

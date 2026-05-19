@@ -210,7 +210,7 @@ func TestAssignSubscriptionReuseWhenSemanticsMatch(t *testing.T) {
 		UserID:    1001,
 		GroupID:   1,
 		StartsAt:  start,
-		ExpiresAt: start.AddDate(0, 0, 30),
+		ExpiresAt: subscriptionExpiryAt(start, 30),
 		Notes:     "init",
 	})
 
@@ -237,7 +237,7 @@ func TestAssignSubscriptionConflictWhenSemanticsMismatch(t *testing.T) {
 		UserID:    2001,
 		GroupID:   1,
 		StartsAt:  start,
-		ExpiresAt: start.AddDate(0, 0, 30),
+		ExpiresAt: subscriptionExpiryAt(start, 30),
 		Notes:     "old-note",
 	})
 
@@ -265,7 +265,7 @@ func TestBulkAssignSubscriptionCreatedReusedAndConflict(t *testing.T) {
 		UserID:    1,
 		GroupID:   1,
 		StartsAt:  start,
-		ExpiresAt: start.AddDate(0, 0, 30),
+		ExpiresAt: subscriptionExpiryAt(start, 30),
 		Notes:     "same-note",
 	})
 	// user 3: 语义冲突（有效期不一致），应 failed
@@ -274,7 +274,7 @@ func TestBulkAssignSubscriptionCreatedReusedAndConflict(t *testing.T) {
 		UserID:    3,
 		GroupID:   1,
 		StartsAt:  start,
-		ExpiresAt: start.AddDate(0, 0, 60),
+		ExpiresAt: subscriptionExpiryAt(start, 60),
 		Notes:     "same-note",
 	})
 
@@ -332,7 +332,7 @@ func TestDetectAssignSemanticConflictCases(t *testing.T) {
 		UserID:    1,
 		GroupID:   1,
 		StartsAt:  start,
-		ExpiresAt: start.AddDate(0, 0, 30),
+		ExpiresAt: subscriptionExpiryAt(start, 30),
 		Notes:     "same",
 	}
 
@@ -362,6 +362,21 @@ func TestDetectAssignSemanticConflictCases(t *testing.T) {
 	})
 	require.True(t, conflict)
 	require.Equal(t, "notes_mismatch", reason)
+}
+
+func TestSubscriptionExpiryAtAnchorsToStartOfDay(t *testing.T) {
+	base := time.Date(2026, 2, 20, 15, 45, 0, 0, time.FixedZone("UTC+8", 8*3600))
+
+	expiresAt := subscriptionExpiryAt(base, 1)
+
+	require.Equal(t, time.Date(2026, 2, 21, 0, 0, 0, 0, base.Location()), expiresAt)
+}
+
+func TestDaysRemainingRoundsUp(t *testing.T) {
+	now := time.Now()
+	sub := &UserSubscription{ExpiresAt: now.Add(25 * time.Hour)}
+
+	require.Equal(t, 2, sub.DaysRemaining())
 }
 
 func TestAssignSubscriptionGroupTypeValidation(t *testing.T) {

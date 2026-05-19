@@ -1521,16 +1521,19 @@ export interface AssignSubscriptionRequest {
   user_id: number
   group_id: number
   validity_days?: number
+  expires_at?: string
 }
 
 export interface BulkAssignSubscriptionRequest {
   user_ids: number[]
   group_id: number
   validity_days?: number
+  expires_at?: string
 }
 
 export interface ExtendSubscriptionRequest {
-  days: number
+  days?: number
+  expires_at?: string
 }
 
 // ==================== Query Parameters ====================

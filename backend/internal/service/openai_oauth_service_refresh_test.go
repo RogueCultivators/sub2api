@@ -79,7 +79,7 @@ func TestOpenAITokenRefresher_NeedsRefresh_SkipsAccountWithoutRefreshToken(t *te
 	require.True(t, refresher.NeedsRefresh(withRT, 5*time.Minute))
 }
 
-func TestOpenAITokenProvider_NoRefreshTokenExpiredAccessTokenReturnsError(t *testing.T) {
+func TestOpenAITokenProvider_NoRefreshTokenExpiredAccessTokenFallsBack(t *testing.T) {
 	provider := NewOpenAITokenProvider(nil, nil, nil)
 	expiresAt := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
 	account := &Account{
@@ -92,7 +92,6 @@ func TestOpenAITokenProvider_NoRefreshTokenExpiredAccessTokenReturnsError(t *tes
 	}
 
 	token, err := provider.GetAccessToken(context.Background(), account)
-	require.Error(t, err)
-	require.Empty(t, token)
-	require.Contains(t, err.Error(), "refresh_token is missing")
+	require.NoError(t, err)
+	require.Equal(t, "expired-access-token", token)
 }

@@ -375,7 +375,6 @@
                 :platform="sub.group?.platform"
                 :subscription-type="sub.group?.subscription_type"
                 :rate-multiplier="sub.group?.rate_multiplier"
-                :days-remaining="sub.expires_at ? getDaysRemaining(sub.expires_at) : null"
                 :title="sub.expires_at ? formatDateTime(sub.expires_at) : ''"
               />
             </div>
@@ -1125,13 +1124,6 @@ const balanceOperation = ref<'add' | 'subtract'>('add')
 const showBalanceHistoryModal = ref(false)
 const balanceHistoryUser = ref<AdminUser | null>(null)
 
-// 计算剩余天数
-const getDaysRemaining = (expiresAt: string): number => {
-  const now = new Date()
-  const expires = new Date(expiresAt)
-  const diffMs = expires.getTime() - now.getTime()
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-}
 
 const loadAttributeDefinitions = async () => {
   try {

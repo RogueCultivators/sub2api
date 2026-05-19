@@ -351,11 +351,8 @@
                     : 'text-gray-700 dark:text-gray-300'
                 "
               >
-                {{ formatDateOnly(value) }}
+                {{ formatDateTime(value) }}
               </span>
-              <div v-if="getDaysRemaining(value) !== null" class="text-xs text-gray-500">
-                {{ getDaysRemaining(value) }} {{ t('admin.subscriptions.daysRemaining') }}
-              </div>
             </div>
             <span v-else class="text-sm text-gray-500">{{
               t('admin.subscriptions.noExpiration')
@@ -522,10 +519,36 @@
           </Select>
           <p class="input-hint">{{ t('admin.subscriptions.groupHint') }}</p>
         </div>
+        <div class="grid grid-cols-2 gap-2 rounded-lg bg-gray-50 p-1 dark:bg-dark-700">
+          <label class="flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm" :class="assignForm.mode === 'days' ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-600' : 'text-gray-600 dark:text-gray-300'">
+            <input v-model="assignForm.mode" type="radio" value="days" class="sr-only" />
+            {{ t('admin.subscriptions.form.validityDays') }}
+          </label>
+          <label class="flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm" :class="assignForm.mode === 'expires_at' ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-600' : 'text-gray-600 dark:text-gray-300'">
+            <input v-model="assignForm.mode" type="radio" value="expires_at" class="sr-only" />
+            {{ t('admin.subscriptions.form.expiresAt') }}
+          </label>
+        </div>
         <div>
           <label class="input-label">{{ t('admin.subscriptions.form.validityDays') }}</label>
-          <input v-model.number="assignForm.validity_days" type="number" min="1" class="input" />
+          <input
+            v-model.number="assignForm.validity_days"
+            type="number"
+            min="1"
+            class="input"
+            :disabled="assignForm.mode !== 'days'"
+          />
           <p class="input-hint">{{ t('admin.subscriptions.validityHint') }}</p>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.subscriptions.form.expiresAt') }}</label>
+          <input
+            v-model="assignForm.expires_at"
+            type="datetime-local"
+            class="input"
+            :disabled="assignForm.mode !== 'expires_at'"
+          />
+          <p class="input-hint">{{ t('admin.subscriptions.expiresAtHint') }}</p>
         </div>
       </form>
       <template #footer>
@@ -590,17 +613,21 @@
             <span class="font-medium text-gray-900 dark:text-white">
               {{
                 extendingSubscription.expires_at
-                  ? formatDateOnly(extendingSubscription.expires_at)
+                  ? formatDateTime(extendingSubscription.expires_at)
                   : t('admin.subscriptions.noExpiration')
               }}
             </span>
           </p>
-          <p v-if="extendingSubscription.expires_at" class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            {{ t('admin.subscriptions.remainingDays') }}:
-            <span class="font-medium text-gray-900 dark:text-white">
-              {{ getDaysRemaining(extendingSubscription.expires_at) ?? 0 }}
-            </span>
-          </p>
+        </div>
+        <div class="grid grid-cols-2 gap-2 rounded-lg bg-gray-50 p-1 dark:bg-dark-700">
+          <label class="flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm" :class="extendForm.mode === 'days' ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-600' : 'text-gray-600 dark:text-gray-300'">
+            <input v-model="extendForm.mode" type="radio" value="days" class="sr-only" />
+            {{ t('admin.subscriptions.form.adjustDays') }}
+          </label>
+          <label class="flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm" :class="extendForm.mode === 'expires_at' ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-600' : 'text-gray-600 dark:text-gray-300'">
+            <input v-model="extendForm.mode" type="radio" value="expires_at" class="sr-only" />
+            {{ t('admin.subscriptions.form.expiresAt') }}
+          </label>
         </div>
         <div>
           <label class="input-label">{{ t('admin.subscriptions.form.adjustDays') }}</label>
@@ -608,12 +635,22 @@
             <input
               v-model.number="extendForm.days"
               type="number"
-              required
               class="input text-center"
               :placeholder="t('admin.subscriptions.adjustDaysPlaceholder')"
+              :disabled="extendForm.mode !== 'days'"
             />
           </div>
           <p class="input-hint">{{ t('admin.subscriptions.adjustHint') }}</p>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.subscriptions.form.expiresAt') }}</label>
+          <input
+            v-model="extendForm.expires_at"
+            type="datetime-local"
+            class="input"
+            :disabled="extendForm.mode !== 'expires_at'"
+          />
+          <p class="input-hint">{{ t('admin.subscriptions.adjustExpiresAtHint') }}</p>
         </div>
       </form>
       <template #footer>
@@ -742,10 +779,10 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
-import type { UserSubscription, Group, GroupPlatform, SubscriptionType } from '@/types'
+import type { UserSubscription, Group, GroupPlatform, SubscriptionType, AssignSubscriptionRequest, ExtendSubscriptionRequest } from '@/types'
 import type { SimpleUser } from '@/api/admin/usage'
 import type { Column } from '@/components/common/types'
-import { formatDateOnly } from '@/utils/format'
+import { formatDateTime } from '@/utils/format'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -949,11 +986,15 @@ const revokingSubscription = ref<UserSubscription | null>(null)
 const assignForm = reactive({
   user_id: null as number | null,
   group_id: null as number | null,
-  validity_days: 30
+  mode: 'days' as 'days' | 'expires_at',
+  validity_days: 30 as number | null,
+  expires_at: ''
 })
 
 const extendForm = reactive({
-  days: 30
+  mode: 'days' as 'days' | 'expires_at',
+  days: 30 as number | null,
+  expires_at: ''
 })
 
 // Group options for filter (all groups)
@@ -1082,6 +1123,17 @@ const selectFilterUser = (user: SimpleUser) => {
   applyFilters()
 }
 
+const localDateTimeToISOString = (value: string): string | undefined => {
+  if (!value) return undefined
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return undefined
+  return date.toISOString()
+}
+
+const isNonZeroDays = (value: unknown): value is number => {
+  return typeof value === 'number' && Number.isFinite(value) && value !== 0
+}
+
 const clearFilterUser = () => {
   selectedFilterUser.value = null
   filterUserKeyword.value = ''
@@ -1160,7 +1212,9 @@ const closeAssignModal = () => {
   showAssignModal.value = false
   assignForm.user_id = null
   assignForm.group_id = null
+  assignForm.mode = 'days'
   assignForm.validity_days = 30
+  assignForm.expires_at = ''
   // Clear user search state
   selectedUser.value = null
   userSearchKeyword.value = ''
@@ -1177,18 +1231,32 @@ const handleAssignSubscription = async () => {
     appStore.showError(t('admin.subscriptions.pleaseSelectGroup'))
     return
   }
-  if (!assignForm.validity_days || assignForm.validity_days < 1) {
+  const assignExpiresAt = assignForm.mode === 'expires_at' ? localDateTimeToISOString(assignForm.expires_at) : undefined
+  const hasValidityDays = typeof assignForm.validity_days === 'number' && Number.isFinite(assignForm.validity_days) && assignForm.validity_days > 0
+  if (assignForm.mode === 'days' && !hasValidityDays) {
     appStore.showError(t('admin.subscriptions.validityDaysRequired'))
     return
+  }
+  if (assignForm.mode === 'expires_at' && !assignExpiresAt) {
+    appStore.showError(t('admin.subscriptions.expiresAtRequired'))
+    return
+  }
+  if (assignExpiresAt && new Date(assignExpiresAt) <= new Date()) {
+    appStore.showError(t('admin.subscriptions.expiresAtMustBeFuture'))
+    return
+  }
+
+  const payload: AssignSubscriptionRequest = {
+    user_id: assignForm.user_id,
+    group_id: assignForm.group_id,
+    ...(assignForm.mode === 'expires_at' && assignExpiresAt
+      ? { expires_at: assignExpiresAt }
+      : { validity_days: assignForm.validity_days as number })
   }
 
   submitting.value = true
   try {
-    await adminAPI.subscriptions.assign({
-      user_id: assignForm.user_id,
-      group_id: assignForm.group_id,
-      validity_days: assignForm.validity_days
-    })
+    await adminAPI.subscriptions.assign(payload)
     appStore.showSuccess(t('admin.subscriptions.subscriptionAssigned'))
     closeAssignModal()
     loadSubscriptions()
@@ -1202,33 +1270,55 @@ const handleAssignSubscription = async () => {
 
 const handleExtend = (subscription: UserSubscription) => {
   extendingSubscription.value = subscription
+  extendForm.mode = 'days'
   extendForm.days = 30
+  extendForm.expires_at = ''
   showExtendModal.value = true
 }
 
 const closeExtendModal = () => {
   showExtendModal.value = false
   extendingSubscription.value = null
+  extendForm.mode = 'days'
+  extendForm.days = 30
+  extendForm.expires_at = ''
 }
 
 const handleExtendSubscription = async () => {
   if (!extendingSubscription.value) return
 
+  const extendExpiresAt = extendForm.mode === 'expires_at' ? localDateTimeToISOString(extendForm.expires_at) : undefined
+  const hasDays = isNonZeroDays(extendForm.days)
+  if (extendForm.mode === 'days' && !hasDays) {
+    appStore.showError(t('admin.subscriptions.adjustInputRequired'))
+    return
+  }
+  if (extendForm.mode === 'expires_at' && !extendExpiresAt) {
+    appStore.showError(t('admin.subscriptions.expiresAtRequired'))
+    return
+  }
+  if (extendExpiresAt && new Date(extendExpiresAt) <= new Date()) {
+    appStore.showError(t('admin.subscriptions.expiresAtMustBeFuture'))
+    return
+  }
+
   // 前端验证：调整后的过期时间必须在未来
-  if (extendingSubscription.value.expires_at) {
+  if (extendForm.mode === 'days' && hasDays && extendingSubscription.value.expires_at) {
     const expiresAt = new Date(extendingSubscription.value.expires_at)
-    const newExpiresAt = new Date(expiresAt.getTime() + extendForm.days * 24 * 60 * 60 * 1000)
+    const newExpiresAt = new Date(expiresAt.getTime() + (extendForm.days || 0) * 24 * 60 * 60 * 1000)
     if (newExpiresAt <= new Date()) {
       appStore.showError(t('admin.subscriptions.adjustWouldExpire'))
       return
     }
   }
 
+  const payload: ExtendSubscriptionRequest = extendExpiresAt
+    ? { expires_at: extendExpiresAt }
+    : { days: extendForm.days as number }
+
   submitting.value = true
   try {
-    await adminAPI.subscriptions.extend(extendingSubscription.value.id, {
-      days: extendForm.days
-    })
+    await adminAPI.subscriptions.extend(extendingSubscription.value.id, payload)
     appStore.showSuccess(t('admin.subscriptions.subscriptionAdjusted'))
     closeExtendModal()
     loadSubscriptions()
@@ -1284,7 +1374,7 @@ const confirmResetQuota = async () => {
 }
 
 // Helper functions
-const getDaysRemaining = (expiresAt: string): number | null => {
+const getDaysUntilExpiration = (expiresAt: string): number | null => {
   const now = new Date()
   const expires = new Date(expiresAt)
   const diff = expires.getTime() - now.getTime()
@@ -1293,7 +1383,7 @@ const getDaysRemaining = (expiresAt: string): number | null => {
 }
 
 const isExpiringSoon = (expiresAt: string): boolean => {
-  const days = getDaysRemaining(expiresAt)
+  const days = getDaysUntilExpiration(expiresAt)
   return days !== null && days <= 7
 }
 
