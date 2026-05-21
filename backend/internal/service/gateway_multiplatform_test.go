@@ -3293,3 +3293,7 @@ func TestGatewayService_ResolveGatewayGroup_DetectsFallbackCycle(t *testing.T) {
 	require.Nil(t, gotID)
 	require.Contains(t, err.Error(), "fallback group cycle")
 }
+
+func (m *mockGroupRepoForGateway) AutoPauseExpiredGroups(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}

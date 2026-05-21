@@ -420,3 +420,5 @@ func strconvFormatInt(v int64) string {
 func infraerrorsReason(err error) string {
 	return infraerrors.Reason(err)
 }
+
+func (groupRepoNoop) AutoPauseExpiredGroups(context.Context, time.Time) (int64, error) { return 0, nil }

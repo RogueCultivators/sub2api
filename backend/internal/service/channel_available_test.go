@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
@@ -308,4 +309,8 @@ func TestFillGlobalPricingFallback_KeepsExistingPrice(t *testing.T) {
 
 func newStubPricingServiceFromMap(data map[string]*LiteLLMModelPricing) *PricingService {
 	return &PricingService{pricingData: data}
+}
+
+func (s *stubGroupRepoForAvailable) AutoPauseExpiredGroups(context.Context, time.Time) (int64, error) {
+	return 0, nil
 }

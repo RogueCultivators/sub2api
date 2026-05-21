@@ -144,8 +144,8 @@ func ProvideUsageCleanupService(repo UsageCleanupRepository, timingWheel *Timing
 }
 
 // ProvideAccountExpiryService creates and starts AccountExpiryService.
-func ProvideAccountExpiryService(accountRepo AccountRepository) *AccountExpiryService {
-	svc := NewAccountExpiryService(accountRepo, time.Minute)
+func ProvideAccountExpiryService(accountRepo AccountRepository, groupRepo GroupRepository) *AccountExpiryService {
+	svc := NewAccountExpiryService(accountRepo, groupRepo, time.Minute)
 	svc.Start()
 	return svc
 }

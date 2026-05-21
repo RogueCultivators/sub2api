@@ -363,3 +363,7 @@ func TestGatewayHandlerMessages_InterceptWarmup_AntigravityAccount_ForcePlatform
 	require.Equal(t, "msg_mock_warmup", resp["id"])
 	require.Equal(t, "claude-sonnet-4-5", resp["model"])
 }
+
+func (f *fakeGroupRepo) AutoPauseExpiredGroups(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}

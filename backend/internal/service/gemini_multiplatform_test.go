@@ -969,3 +969,7 @@ func TestGeminiMessagesCompatService_isModelSupportedByAccount(t *testing.T) {
 		})
 	}
 }
+
+func (m *mockGroupRepoForGemini) AutoPauseExpiredGroups(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}

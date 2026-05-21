@@ -636,3 +636,7 @@ func TestAdminService_BatchDeleteRedeemCodes_PartialFailures(t *testing.T) {
 	require.Equal(t, int64(2), deleted)
 	require.Equal(t, []int64{1, 2, 3}, repo.deletedIDs)
 }
+
+func (s *groupRepoStub) AutoPauseExpiredGroups(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}

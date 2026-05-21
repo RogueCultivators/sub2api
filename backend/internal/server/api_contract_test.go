@@ -2555,3 +2555,7 @@ var (
 	_ service.UsageLogRepository         = (*stubUsageLogRepo)(nil)
 	_ service.SettingRepository          = (*stubSettingRepo)(nil)
 )
+
+func (stubGroupRepo) AutoPauseExpiredGroups(ctx context.Context, now time.Time) (int64, error) {
+	return 0, nil
+}

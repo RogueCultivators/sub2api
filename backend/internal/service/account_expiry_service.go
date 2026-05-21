@@ -7,18 +7,20 @@ import (
 	"time"
 )
 
-// AccountExpiryService periodically pauses expired accounts when auto-pause is enabled.
+// AccountExpiryService periodically pauses expired accounts and groups.
 type AccountExpiryService struct {
 	accountRepo AccountRepository
+	groupRepo   GroupRepository
 	interval    time.Duration
 	stopCh      chan struct{}
 	stopOnce    sync.Once
 	wg          sync.WaitGroup
 }
 
-func NewAccountExpiryService(accountRepo AccountRepository, interval time.Duration) *AccountExpiryService {
+func NewAccountExpiryService(accountRepo AccountRepository, groupRepo GroupRepository, interval time.Duration) *AccountExpiryService {
 	return &AccountExpiryService{
 		accountRepo: accountRepo,
+		groupRepo:   groupRepo,
 		interval:    interval,
 		stopCh:      make(chan struct{}),
 	}
@@ -60,12 +62,21 @@ func (s *AccountExpiryService) runOnce() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	updated, err := s.accountRepo.AutoPauseExpiredAccounts(ctx, time.Now())
-	if err != nil {
-		log.Printf("[AccountExpiry] Auto pause expired accounts failed: %v", err)
-		return
+	now := time.Now()
+	if s.accountRepo != nil {
+		updated, err := s.accountRepo.AutoPauseExpiredAccounts(ctx, now)
+		if err != nil {
+			log.Printf("[AccountExpiry] Auto pause expired accounts failed: %v", err)
+		} else if updated > 0 {
+			log.Printf("[AccountExpiry] Auto paused %d expired accounts", updated)
+		}
 	}
-	if updated > 0 {
-		log.Printf("[AccountExpiry] Auto paused %d expired accounts", updated)
+	if s.groupRepo != nil {
+		updated, err := s.groupRepo.AutoPauseExpiredGroups(ctx, now)
+		if err != nil {
+			log.Printf("[AccountExpiry] Auto pause expired groups failed: %v", err)
+		} else if updated > 0 {
+			log.Printf("[AccountExpiry] Auto paused %d expired groups", updated)
+		}
 	}
 }

@@ -185,6 +185,19 @@
             >
           </template>
 
+          <template #cell-expires_at="{ value }">
+            <span
+              :class="[
+                'text-xs',
+                isExpiredDate(value)
+                  ? 'font-medium text-red-600 dark:text-red-400'
+                  : 'text-gray-500 dark:text-gray-400',
+              ]"
+            >
+              {{ value ? formatGroupExpiresAt(value) : t("admin.groups.neverExpires") }}
+            </span>
+          </template>
+
           <template #cell-is_exclusive="{ value }">
             <span :class="['badge', value ? 'badge-primary' : 'badge-gray']">
               {{
@@ -508,6 +521,15 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+        <div>
+          <label class="input-label">{{ t("admin.groups.form.expiresAt") }}</label>
+          <input
+            v-model="createForm.expires_at"
+            type="datetime-local"
+            class="input"
+          />
+          <p class="input-hint">{{ t("admin.groups.form.expiresAtHint") }}</p>
         </div>
         <div
           v-if="createForm.subscription_type !== 'subscription'"
@@ -1692,6 +1714,15 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
+        <div>
+          <label class="input-label">{{ t("admin.groups.form.expiresAt") }}</label>
+          <input
+            v-model="editForm.expires_at"
+            type="datetime-local"
+            class="input"
+          />
+          <p class="input-hint">{{ t("admin.groups.form.expiresAtHint") }}</p>
+        </div>
         <div v-if="editForm.subscription_type !== 'subscription'">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -2853,6 +2884,7 @@ import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesMo
 import GroupCapacityBadge from "@/components/common/GroupCapacityBadge.vue";
 import { VueDraggable } from "vue-draggable-plus";
 import { createStableObjectKeyResolver } from "@/utils/stableObjectKey";
+import { formatDateTime } from "@/utils/format";
 import { useKeyedDebouncedSearch } from "@/composables/useKeyedDebouncedSearch";
 import { getPersistedPageSize } from "@/composables/usePersistedPageSize";
 import {
@@ -2883,6 +2915,11 @@ const columns = computed<Column[]>(() => [
   {
     key: "rate_multiplier",
     label: t("admin.groups.columns.rateMultiplier"),
+    sortable: true,
+  },
+  {
+    key: "expires_at",
+    label: t("admin.groups.columns.expiresAt"),
     sortable: true,
   },
   {
@@ -3137,6 +3174,7 @@ const createForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  expires_at: "",
 });
 
 // 简单账号类型（用于模型路由选择）
@@ -3423,7 +3461,30 @@ const editForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  expires_at: "",
 });
+
+const toDateTimeLocalInput = (value: string | null | undefined): string => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+};
+
+const dateTimeLocalToISOString = (value: string | null | undefined): string | null => {
+  if (!value || !value.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const formatGroupExpiresAt = (value: string): string => formatDateTime(value);
+
+const isExpiredDate = (value: string | null | undefined): boolean => {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getTime() <= Date.now();
+};
 
 type ImagePricingFormState = {
   rate_multiplier: number;
@@ -3654,6 +3715,7 @@ const closeCreateModal = () => {
   createForm.supported_model_scopes = ["claude", "gemini_text", "gemini_image"];
   createForm.mcp_xml_inject = true;
   createForm.copy_accounts_from_group_ids = [];
+  createForm.expires_at = "";
   createModelRoutingRules.value = [];
 };
 
@@ -3722,6 +3784,7 @@ const handleCreateGroup = async () => {
               exact_model_mappings: createForm.exact_model_mappings,
             })
           : undefined,
+      expires_at: dateTimeLocalToISOString(createForm.expires_at),
     };
     // v-model.number 清空输入框时产生 ""，转为 null 让后端设为无限制
     const emptyToNull = (v: any) => (v === "" ? null : v);
@@ -3794,6 +3857,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true;
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
+  editForm.expires_at = toDateTimeLocalInput(group.expires_at);
   // 加载模型路由规则（异步加载账号名称）
   editModelRoutingRules.value = await convertApiFormatToRoutingRules(
     group.model_routing,
@@ -3857,6 +3921,7 @@ const handleUpdateGroup = async () => {
               exact_model_mappings: editForm.exact_model_mappings,
             })
           : undefined,
+      expires_at: dateTimeLocalToISOString(editForm.expires_at),
     };
     // v-model.number 清空输入框时产生 ""，转为 null 让后端设为无限制
     const emptyToNull = (v: any) => (v === "" ? null : v);

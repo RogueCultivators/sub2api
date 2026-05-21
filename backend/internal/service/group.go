@@ -66,6 +66,9 @@ type Group struct {
 	// 一旦设置即接管该分组用户的限流（覆盖用户级 rpm_limit），可被 user-group rpm_override 进一步覆盖。
 	RPMLimit int
 
+	// ExpiresAt 分组有效期；nil 表示不过期。后台任务会将过期 active 分组自动置为 inactive。
+	ExpiresAt *time.Time
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

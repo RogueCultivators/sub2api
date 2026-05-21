@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/group"
@@ -66,7 +67,8 @@ func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) er
 		SetRequirePrivacySet(groupIn.RequirePrivacySet).
 		SetDefaultMappedModel(groupIn.DefaultMappedModel).
 		SetMessagesDispatchModelConfig(groupIn.MessagesDispatchModelConfig).
-		SetRpmLimit(groupIn.RPMLimit)
+		SetRpmLimit(groupIn.RPMLimit).
+		SetNillableExpiresAt(groupIn.ExpiresAt)
 
 	// 设置模型路由配置
 	if groupIn.ModelRouting != nil {
@@ -142,6 +144,12 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetDefaultMappedModel(groupIn.DefaultMappedModel).
 		SetMessagesDispatchModelConfig(groupIn.MessagesDispatchModelConfig).
 		SetRpmLimit(groupIn.RPMLimit)
+
+	if groupIn.ExpiresAt != nil {
+		builder = builder.SetExpiresAt(*groupIn.ExpiresAt)
+	} else {
+		builder = builder.ClearExpiresAt()
+	}
 
 	// 显式处理可空字段：nil 需要 clear，非 nil 需要 set。
 	if groupIn.DailyLimitUSD != nil {
@@ -867,4 +875,29 @@ func (r *groupRepository) UpdateSortOrders(ctx context.Context, updates []servic
 		}
 	}
 	return nil
+}
+
+func (r *groupRepository) AutoPauseExpiredGroups(ctx context.Context, now time.Time) (int64, error) {
+	result, err := r.sql.ExecContext(ctx, `
+		UPDATE groups
+		SET status = $1,
+			updated_at = NOW()
+		WHERE deleted_at IS NULL
+			AND status = $2
+			AND expires_at IS NOT NULL
+			AND expires_at <= $3
+	`, service.StatusInactive, service.StatusActive, now)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if rows > 0 {
+		if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventFullRebuild, nil, nil, nil); err != nil {
+			logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group expiry rebuild failed: err=%v", err)
+		}
+	}
+	return rows, nil
 }
